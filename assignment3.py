@@ -87,13 +87,13 @@ class Application:
         self.time_starts = False
 
         # left image will shows the orignal image
-        self.c_orig = tk.Canvas(root, width=410, height=410, bg="gray")
-        self.c_orig.grid(row=0, column=0, padx=10, pady=10)
+        self.orignall = tk.Canvas(root, width=410, height=410, bg="silver")
+        self.orignall.grid(row=0, column=0, padx=10, pady=10)
 
         # Modified image where the user will click too find the differences 
-        self.c_mod = tk.Canvas(root, width=410, height=410, bg="gray")
-        self.c_mod.grid(row=0, column=1, padx=10, pady=10)
-        self.c_mod.bind("<Button-1>", self.click)
+        self.modify = tk.Canvas(root, width=410, height=410, bg="silver")
+        self.modify.grid(row=0, column=1, padx=10, pady=10)
+        self.modify.bind("<Button-1>", self.click)
 
         #we will upload the image by clicking upload image button and the info label will show all the detils such as differences,incorrect, gamescore
         self.info = tk.Label(root, text="Please  load your image to start the game ", font=("Calibri", 12))
@@ -135,14 +135,14 @@ class Application:
         o = self.to_tk(self.Gamelogic.prcessor.orignal)
         m = self.to_tk(self.Gamelogic.prcessor.modification)
 
-        self.c_orig.delete("all")
-        self.c_mod.delete("all")
+        self.orignall.delete("all")
+        self.modify.delete("all")
 
-        self.c_orig.create_image(0, 0, anchor="nw", image=o)
-        self.c_orig.image = o  
+        self.orignall.create_image(0, 0, anchor="nw", image=o)
+        self.orignall.image = o  
 
-        self.c_mod.create_image(0, 0, anchor="nw", image=m)
-        self.c_mod.image = m
+        self.modify.create_image(0, 0, anchor="nw", image=m)
+        self.modify.image = m
 
         self._update_info()
 
@@ -174,7 +174,7 @@ class Application:
 
         if hit:
             # if it is correct we wil draw red circles on both images 
-            for c in [self.c_orig, self.c_mod]:
+            for c in [self.orignall, self.modify]:
                 c.create_oval(event.x - 25, event.y - 25,
                               event.x + 25, event.y + 25,
                               outline="red", width=2)
@@ -191,7 +191,7 @@ class Application:
                     text=f"Too many incorrect! differencefound: {len(self.Gamelogic.differencefound)}/5 — upload a new image to restart game.")
                 messagebox.showinfo("Oops Game Over", "You have made 3 wrong clicks — Game Over!")
             else:
-                messagebox.showwarning("incorrect!", f"that's not a difference. incorrect: {self.Gamelogic.incorrect}/3")
+                messagebox.showwarning("Incorrect!", f"That's Not a difference. Incorrect: {self.Gamelogic.incorrect}/3")
 
         self._update_info()
 
@@ -204,7 +204,7 @@ class Application:
         self.locked = True
         for x, y in self.Gamelogic.prcessor.difference:
             if (x, y) not in self.Gamelogic.differencefound:
-                for c in [self.c_orig, self.c_mod]:
+                for c in [self.orignall, self.modify]:
                     c.create_oval(x - 30, y - 30, x + 30, y + 30,
                                   outline="blue", width=2) #we will draw blue circle to reavel the differences from in both images
         self.status.config(text="All difference revealed. please upload a new image to play again.")
