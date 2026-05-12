@@ -1,4 +1,61 @@
-"""
+def _reveal_all(self):
+    """
+    Show all unfound differences with blue circles on both images.
+    The round ends after this -- player must load a new image.
+    """
+    # Check if there are any unfound differences to reveal
+    unfound = [d for d in self.processor.differences if not d.found]
+    if not unfound:
+        return
+
+    blue = (255, 100, 0)  # BGR blue
+
+    for diff in unfound:
+        cx, cy = diff.get_center()
+        self.original_display = self.processor.draw_circle_on_image(
+            self.original_display, cx, cy, radius=30, colour=blue)
+        self.modified_display = self.processor.draw_circle_on_image(
+            self.modified_display, cx, cy, radius=30, colour=blue)
+        diff.mark_found()
+
+    self.game_active = False
+    self.reveal_btn.config(state=tk.DISABLED)
+    self._refresh_canvases()
+    self._update_status("All differences revealed. Load a new image to play again.")
+    messagebox.showinfo(
+        "Differences Revealed",
+        "Blue circles show any differences you missed.\n\nLoad a new image to keep playing."
+    )
+Fix 2 - in _handle_wrong_click, remove this line that disables reveal on 3 mistakes:
+python# DELETE this line inside _handle_wrong_click
+self.reveal_btn.config(state=tk.DISABLED)
+So _handle_wrong_click becomes:
+pythondef _handle_wrong_click(self, cx, cy):
+    """Player clicked somewhere that wasn't a difference."""
+    self.score.record_mistake()
+    self._update_score_display()
+
+    if self.score.is_out_of_mistakes():
+        # Round is over but reveal stays available
+        self.game_active = False
+        self._update_status("3 mistakes reached. Game over for this image.")
+        found = self.score.current_found
+        messagebox.showwarning(
+            "Too many mistakes",
+            f"You made 3 mistakes.\n\n"
+            f"Differences found: {found}/5\n"
+            f"Total score: {self.score.total_found}\n\n"
+            "Load a new image to try again."
+        )
+    else:
+        remaining_guesses = self.score.mistakes_remaining()
+        self._update_status(
+            f"Miss! {remaining_guesses} mistake{'s' if remaining_guesses != 1 else ''} left."
+        )
+Fix 3 - for the cut-off right image, add a scrollable frame. In _build_ui, replace the window's self.resizable(True, True) line in __init__ with:
+pythonself.resizable(True, True)
+self.minsize(1300, 600)
+That forces the window wide enough to show both images. Just those three changes and both buttons will work correctly.You said: can you update and give me the whole code againcan you update and give me the whole code againMay 11Claude responded: The two fixes in this version:python"""
 Spot the Difference Game
 HIT137 Group Assignment 3
 
@@ -68,6 +125,8 @@ class Difference:
         """Mark this difference as found by the player."""
         self.found = True
 
+
+# ──────────────────────────────────────────────
 # Class 2: ImageProcessor
 # Handles all OpenCV image work.
 # Loads the original, clones it, and injects
@@ -238,3 +297,171 @@ class ImageProcessor:
             return (0, 0)
         h, w = self.original_cv.shape[:2]
         return (w, h)
+
+
+# ──────────────────────────────────────────────
+# Class 3: ScoreTracker
+# Keeps score across multiple images in a session.
+# Tracks total found differences and total mistakes.
+# This is the "memory" of how the player is doing overall.
+# ──────────────────────────────────────────────
+class ScoreTracker:
+    MAX_MISTAKES_PER_IMAGE = 3
+
+    def __init__(self):
+        self.total_found = 0       # Cumulative differences found across all images
+        self.total_mistakes = 0    # Cumulative mistakes across all images
+        self.current_mistakes = 0  # Mistakes in the current image only
+        self.current_found = 0     # Differences found in the current image only
+        self.images_played = 0     # How many images the player has attempted
+
+    def reset_for_new_image(self):
+        """Called each time a new image loads. Carry totals forward, reset per-image stats."""
+        self.current_mistakes = 0
+        self.current_found = 0
+        self.images_played += 1
+
+    def record_correct(self):
+        """Player clicked a real difference."""
+        self.current_found += 1
+        self.total_found += 1
+
+    def record_mistake(self):
+        """Player clicked somewhere that wasn't a difference."""
+        self.current_mistakes += 1
+        self.total_mistakes += 1
+
+    def is_out_of_mistakes(self):
+        """True if the player has used all their allowed mistakes for this image."""
+        return self.current_mistakes >= self.MAX_MISTAKES_PER_IMAGE
+
+    def mistakes_remaining(self):
+        """How many wrong clicks the player has left before they lose the round."""
+        return self.MAX_MISTAKES_PER_IMAGE - self.current_mistakes
+
+    def get_summary(self):
+        """Return a short summary string for the status bar."""
+        return (
+            f"Found: {self.current_found}/5  |  "
+            f"Mistakes: {self.current_mistakes}/{self.MAX_MISTAKES_PER_IMAGE}  |  "
+            f"Total score: {self.total_found}"
+        )
+
+
+# ──────────────────────────────────────────────
+# Class 4: GameApp (inherits from tk.Tk)
+# This is the main application window.
+# It wires together the GUI, the image processor,
+# and the score tracker. Handles all user interaction.
+# ──────────────────────────────────────────────
+class GameApp(tk.Tk):
+    def __init__(self):
+        super().__init__()
+
+        self.title("Spot the Difference")
+        self.configure(bg="#1a1a2e")
+        self.resizable(True, True)
+        self.minsize(1300, 600)  # Wide enough to show both images without cutting off
+
+        # The two core helpers
+        self.processor = ImageProcessor()
+        self.score = ScoreTracker()
+
+        # Internal state
+        self.game_active = False        # Is a round currently in progress?
+        self.original_display = None    # Current display version of the original (with circles)
+        self.modified_display = None    # Current display version of the modified image (with circles)
+
+        # Tkinter image references (must be kept alive or Python GC will trash them)
+        self._tk_original = None
+        self._tk_modified = None
+
+        self._build_ui()
+        self._update_status("Load an image to start playing.")
+
+    # ── UI Construction ──────────────────────────
+
+    def _build_ui(self):
+        """Set up every widget in the window."""
+
+        # Top control bar
+        ctrl_frame = tk.Frame(self, bg="#16213e", pady=8)
+        ctrl_frame.pack(fill=tk.X)
+
+        btn_style = {
+            "bg": "#e94560",
+            "fg": "white",
+            "font": ("Courier New", 11, "bold"),
+            "relief": tk.FLAT,
+            "padx": 16,
+            "pady": 6,
+            "cursor": "hand2",
+            "activebackground": "#c73652",
+            "activeforeground": "white",
+            "bd": 0,
+        }
+
+        self.load_btn = tk.Button(ctrl_frame, text="LOAD IMAGE", command=self._load_image, **btn_style)
+        self.load_btn.pack(side=tk.LEFT, padx=(12, 6))
+
+        self.reveal_btn = tk.Button(ctrl_frame, text="REVEAL ALL", command=self._reveal_all,
+                                    state=tk.DISABLED, **btn_style)
+        self.reveal_btn.pack(side=tk.LEFT, padx=6)
+
+        # Status bar in the control frame (right side)
+        self.status_var = tk.StringVar(value="")
+        status_lbl = tk.Label(ctrl_frame, textvariable=self.status_var,
+                              bg="#16213e", fg="#a8dadc",
+                              font=("Courier New", 10))
+        status_lbl.pack(side=tk.RIGHT, padx=16)
+
+        # Score display below the controls
+        score_frame = tk.Frame(self, bg="#0f3460", pady=4)
+        score_frame.pack(fill=tk.X)
+
+        self.score_var = tk.StringVar(value="No image loaded")
+        score_lbl = tk.Label(score_frame, textvariable=self.score_var,
+                             bg="#0f3460", fg="#f5f5f5",
+                             font=("Courier New", 11, "bold"))
+        score_lbl.pack()
+
+        # Image area: original on the left, modified on the right
+        images_frame = tk.Frame(self, bg="#1a1a2e", pady=10)
+        images_frame.pack(fill=tk.BOTH, expand=True, padx=10)
+
+        # Left side: original image (read-only, no clicks)
+        left_panel = tk.Frame(images_frame, bg="#1a1a2e")
+        left_panel.pack(side=tk.LEFT, expand=True)
+
+        tk.Label(left_panel, text="ORIGINAL", bg="#1a1a2e", fg="#a8dadc",
+                 font=("Courier New", 10, "bold")).pack(pady=(0, 4))
+
+        self.original_canvas = tk.Canvas(left_panel, bg="#0d0d1a",
+                                         highlightthickness=2,
+                                         highlightbackground="#e94560")
+        self.original_canvas.pack()
+
+        # Divider
+        tk.Frame(images_frame, bg="#e94560", width=2).pack(side=tk.LEFT, fill=tk.Y, padx=8)
+
+        # Right side: modified image (player clicks here)
+        right_panel = tk.Frame(images_frame, bg="#1a1a2e")
+        right_panel.pack(side=tk.LEFT, expand=True)
+
+        tk.Label(right_panel, text="FIND THE DIFFERENCES  (click here)",
+                 bg="#1a1a2e", fg="#e94560",
+                 font=("Courier New", 10, "bold")).pack(pady=(0, 4))
+
+        self.modified_canvas = tk.Canvas(right_panel, bg="#0d0d1a",
+                                          highlightthickness=2,
+                                          highlightbackground="#a8dadc",
+                                          cursor="crosshair")
+        self.modified_canvas.pack()
+
+        # Bind click on the modified image
+        self.modified_canvas.bind("<Button-1>", self._on_image_click)
+
+        # Instructions at the bottom
+        tk.Label(self, text="Click the RIGHT image to spot differences. Max 3 mistakes per image.",
+                 bg="#1a1a2e", fg="#555577",
+                 font=("Courier New", 9)).pack(pady=(0, 8))
