@@ -465,3 +465,184 @@ class GameApp(tk.Tk):
         tk.Label(self, text="Click the RIGHT image to spot differences. Max 3 mistakes per image.",
                  bg="#1a1a2e", fg="#555577",
                  font=("Courier New", 9)).pack(pady=(0, 8))
+        
+
+
+ # ── Game Logic ───────────────────────────────
+
+    def _load_image(self):
+        """Open a file picker, load the chosen image, and start a new round."""
+        filepath = filedialog.askopenfilename(
+            title="Choose an image",
+            filetypes=[("Images", "*.jpg *.jpeg *.png *.bmp"), ("All files", "*.*")]
+        )
+        if not filepath:
+            return  # Player cancelled the dialog
+
+        try:
+            self.processor.load_image(filepath)
+        except ValueError as e:
+            messagebox.showerror("Error", str(e))
+            return
+
+        # Reset score tracking for this new image
+        self.score.reset_for_new_image()
+        self.game_active = True
+
+        # Take fresh copies of both images to draw circles on
+        self.original_display = self.processor.original_cv.copy()
+        self.modified_display = self.processor.modified_cv.copy()
+
+        # Size the canvases to fit the image
+        w, h = self.processor.get_image_size()
+        self.original_canvas.config(width=w, height=h)
+        self.modified_canvas.config(width=w, height=h)
+
+        # Enable the reveal button now that a game is running
+        self.reveal_btn.config(state=tk.NORMAL)
+
+        self._refresh_canvases()
+        self._update_status("Image loaded. Find all 5 differences!")
+        self._update_score_display()
+
+    def _on_image_click(self, event):
+        """
+        Handle a click on the modified image canvas.
+        Check if it hits a difference, track the result, and update the display.
+        """
+        if not self.game_active:
+            self._update_status("Load an image first.")
+            return
+
+        if self.score.is_out_of_mistakes():
+            self._update_status("No more guesses. Load a new image to play again.")
+            return
+
+        click_x, click_y = event.x, event.y
+
+        # See if this click lands on any unfound difference
+        hit = None
+        for diff in self.processor.differences:
+            if not diff.found and diff.is_clicked(click_x, click_y):
+                hit = diff
+                break
+
+        if hit:
+            self._handle_correct_click(hit)
+        else:
+            self._handle_wrong_click(click_x, click_y)
+
+    def _handle_correct_click(self, diff):
+        """Player found a real difference. Mark it, draw a red circle, celebrate a little."""
+        diff.mark_found()
+        self.score.record_correct()
+
+        # Draw the red circle on both images at this difference's centre
+        cx, cy = diff.get_center()
+        red = (0, 0, 255)  # BGR red
+        self.original_display = self.processor.draw_circle_on_image(
+            self.original_display, cx, cy, radius=30, colour=red)
+        self.modified_display = self.processor.draw_circle_on_image(
+            self.modified_display, cx, cy, radius=30, colour=red)
+
+        self._refresh_canvases()
+        self._update_score_display()
+
+        # Check if the player has found all 5
+        found_count = sum(1 for d in self.processor.differences if d.found)
+        if found_count == ImageProcessor.NUM_DIFFERENCES:
+            self.game_active = False
+            self.reveal_btn.config(state=tk.DISABLED)
+            self._update_status("You found all 5 differences!")
+            messagebox.showinfo(
+                "Well done!",
+                f"You found all 5 differences!\n\n"
+                f"Mistakes this round: {self.score.current_mistakes}\n"
+                f"Total score: {self.score.total_found}\n\n"
+                "Load a new image to keep playing."
+            )
+        else:
+            remaining = ImageProcessor.NUM_DIFFERENCES - found_count
+            self._update_status(f"Good find! {remaining} left.")
+
+    def _handle_wrong_click(self, cx, cy):
+        """Player clicked somewhere that wasn't a difference."""
+        self.score.record_mistake()
+        self._update_score_display()
+
+        if self.score.is_out_of_mistakes():
+            # Round is over but reveal stays available so player can see what they missed
+            self.game_active = False
+            self._update_status("3 mistakes reached. Game over for this image.")
+            found = self.score.current_found
+            messagebox.showwarning(
+                "Too many mistakes",
+                f"You made 3 mistakes.\n\n"
+                f"Differences found: {found}/5\n"
+                f"Total score: {self.score.total_found}\n\n"
+                "Use REVEAL ALL to see what you missed, or load a new image."
+            )
+        else:
+            remaining_guesses = self.score.mistakes_remaining()
+            self._update_status(
+                f"Miss! {remaining_guesses} mistake{'s' if remaining_guesses != 1 else ''} left."
+            )
+
+    def _reveal_all(self):
+        """
+        Show all unfound differences with blue circles on both images.
+        The round ends after this -- player must load a new image.
+        """
+        # Only act if there are unfound differences remaining
+        unfound = [d for d in self.processor.differences if not d.found]
+        if not unfound:
+            return
+
+        blue = (255, 100, 0)  # BGR blue
+
+        for diff in unfound:
+            cx, cy = diff.get_center()
+            self.original_display = self.processor.draw_circle_on_image(
+                self.original_display, cx, cy, radius=30, colour=blue)
+            self.modified_display = self.processor.draw_circle_on_image(
+                self.modified_display, cx, cy, radius=30, colour=blue)
+            diff.mark_found()
+
+        self.game_active = False
+        self.reveal_btn.config(state=tk.DISABLED)
+        self._refresh_canvases()
+        self._update_status("All differences revealed. Load a new image to play again.")
+        messagebox.showinfo(
+            "Differences Revealed",
+            "Blue circles show any differences you missed.\n\nLoad a new image to keep playing."
+        )
+
+    # ── Display Helpers ──────────────────────────
+
+    def _refresh_canvases(self):
+        """
+        Convert the current display images (OpenCV) to Tkinter format
+        and paint them onto the two canvases.
+        We store the PhotoImage references on self so they don't get garbage collected.
+        """
+        self._tk_original = self.processor.cv_to_tk(self.original_display)
+        self._tk_modified = self.processor.cv_to_tk(self.modified_display)
+
+        self.original_canvas.create_image(0, 0, anchor=tk.NW, image=self._tk_original)
+        self.modified_canvas.create_image(0, 0, anchor=tk.NW, image=self._tk_modified)
+
+    def _update_status(self, message):
+        """Update the short status message in the top-right of the control bar."""
+        self.status_var.set(message)
+
+    def _update_score_display(self):
+        """Refresh the score bar below the controls."""
+        self.score_var.set(self.score.get_summary())
+
+
+# ──────────────────────────────────────────────
+# Entry point
+# ──────────────────────────────────────────────
+if __name__ == "__main__":
+    app = GameApp()
+    app.mainloop()
