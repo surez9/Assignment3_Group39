@@ -10,7 +10,7 @@ from tkinter import filedialog, messagebox
 # Load Image in the frame with help of Image Processor
 class ImageProcessor:
 
-    IMAGE_SIZE = (450,450)
+    IMAGE_SIZE = (400,400)
     def __init__(self,image_path):
         self.path = image_path
         original_image = cv2.imread(image_path)
@@ -19,6 +19,7 @@ class ImageProcessor:
             raise FileNotFoundError("Image not found")
         
         self.original_image = cv2.resize(original_image,self.IMAGE_SIZE)
+        self.modified_image = self.original_image.copy()
         
 
     def get_path(self):
@@ -26,6 +27,9 @@ class ImageProcessor:
     
     def get_original_image(self):
         return self.original_image.copy()
+    
+    def get_modified_image(self):
+        return self.modified_image.copy()
     
 
 
@@ -44,12 +48,12 @@ class GameState:
 # Main Application Class
 class Application:
 
-    FRAME_SIZE = 450
+    FRAME_SIZE = 400
 
     def __init__(self, root):
         self.root = root
         self.root.title("Spot the Differences")
-        self.root.geometry("800x600")
+        self.root.geometry("850x600")
         self.root.resizable(False, False)
         self.root.configure(bg="#f0f0f0")        
 
@@ -111,17 +115,22 @@ class Application:
         ).grid(row=0, column=0, padx=6)
 
 
-    # Image uploader
+    # Image rendering in the frames
 
     def cv_to_tk(self,img):
         return ImageTk.PhotoImage(Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB)))
 
     def render_frame(self):
         original_image = self.cv_to_tk(self.game.get_processor().get_original_image())
+        modified_image = self.cv_to_tk(self.game.get_processor().get_modified_image())
 
         self.frame_left.delete('all')
         self.frame_left.create_image(0,0,anchor="nw",image=original_image)
         self.frame_left.photo = original_image
+
+        self.frame_right.delete('all')
+        self.frame_right.create_image(0,0,anchor="nw",image=modified_image)
+        self.frame_right.photo = modified_image
 
         
         
