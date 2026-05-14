@@ -108,7 +108,18 @@ class ImageProcessor:
         if original_image is None:
             raise FileNotFoundError("Image not found: "+ image_path)
         
-        self.original_image = cv2.resize(original_image,self.IMAGE_SIZE)
+        # Preserve aspect ratio with letterboxing
+        h, w = original_image.shape[:2]
+        target_w, target_h = self.IMAGE_SIZE
+        scale = min(target_w / w, target_h / h)
+        new_w, new_h = int(w * scale), int(h * scale)
+        resized = cv2.resize(original_image, (new_w, new_h))
+
+        canvas = np.zeros((target_h, target_w, 3), dtype=np.uint8)
+        x_off = (target_w - new_w) // 2
+        y_off = (target_h - new_h) // 2
+        canvas[y_off:y_off + new_h, x_off:x_off + new_w] = resized
+        self.original_image = canvas
         self.modified_image = None
         self._difference_centres = []
         self._generate_difference()
@@ -354,7 +365,7 @@ class Application:
         gs = self.game
 
         if reason == "win":
-            self.status.set("All 5 differences found!")
+            self.status.set("All differences found! You WON!!!")
             messagebox.showinfo("You Win!","Excellent! You found all 5 differences!\nScore: " + str(gs.get_score()), parent = self.root)
         else:
             self.status.set("Too many mistakes! Found " + str(len(gs.get_found())) + "/5 — Load a new image to play again.")
@@ -402,8 +413,13 @@ class Application:
                 for frame in (self.frame_left, self.frame_right):
                     frame.create_oval(
                         x - r, y - r, x + r, y + r,
-                        outline="#4ade80", width=3
+                        outline="#0000FF", width=3
                     )
+        self.game.mistakes = GameState.MAX_MISTAKES
+        for centre in self.game.get_processor().get_difference_centres():
+            if centre not in self.game.get_found():
+                self.game.found.append(centre)
+        self.refresh_info()
         self.status.set("All differences revealed. Load a new image to play again.")
 
     def restart(self):
