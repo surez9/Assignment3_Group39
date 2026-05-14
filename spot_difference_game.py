@@ -171,7 +171,7 @@ class GameState:
         self.processor = processor
         self.found = []
         self.mistakes = 0
-        self.score =0
+        self.score = 0
     
     def get_processor(self):
         return self.processor
@@ -181,6 +181,9 @@ class GameState:
 
     def get_mistakes(self):
         return self.mistakes
+
+    def get_score(self):
+        return self.score
     
     def get_remaining(self):
         return ImageProcessor.NUM_OF_DIFFERENCES - len(self.found)
@@ -206,6 +209,8 @@ class GameState:
                     return True
         self.mistakes += 1
         self.score += self.SCORE_MISS
+        if self.score < 0:
+            self.score = 0
         return False
 
 
@@ -345,7 +350,7 @@ class Application:
                 messagebox.showwarning(
                     "Wrong!",
                     "Not a difference here.\nYou have " +
-                    str(remaining_guesses) + " guess(es) left."
+                    str(remaining_guesses) + " guess(es) left.", parent = self.root
                 )
         
         self.refresh_info()
@@ -356,8 +361,30 @@ class Application:
         self.info_var.set(
               "Remaining: " + str(self.game.get_remaining()) +
             "  |  Mistakes: " + str(self.game.get_mistakes()) +
-            "/" + str(GameState.MAX_MISTAKES) 
+            "/" + str(GameState.MAX_MISTAKES) +
+            "  |  Score: " + str(self.game.get_score()) 
         )
+
+    def end_round(self, reason):
+        gs = self.game
+
+        if reason == "win":
+            self.status.set("All 5 differences found!")
+            messagebox.showinfo(
+                "You Win!",
+                "Excellent! You found all 5 differences!\nScore: " + str(gs.get_score()), parent = self.root
+            )
+        else:
+            self.status.set(
+                "Too many mistakes! Found " +
+                str(len(gs.get_found())) + "/5 — load a new image."
+            )
+            messagebox.showinfo(
+                "Game Over",
+                "You made 3 mistakes.\nFound: " + str(len(gs.get_found())) +
+                "/5  |  Score: " + str(gs.get_score()), parent = self.root
+            )
+
 
 
     # Image rendering in the frames
