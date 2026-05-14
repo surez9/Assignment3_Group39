@@ -278,7 +278,7 @@ class Application:
         info_bar = tk.Label(
             self.root,
             textvariable = self.info,
-            font = ("Helvetica", 12),
+            font = ("Helvetica", 16),
             bg = "#f0f0f0"
         )
         info_bar.pack(fill=tk.X, pady=20)
@@ -287,7 +287,7 @@ class Application:
         tk.Label(
             self.root,
             textvariable = self.status,
-            font = ("Helvetica", 12),
+            font = ("Helvetica", 14),
             fg="#ff0000",
             bg = "#f0f0f0"
         ).pack()
@@ -358,7 +358,7 @@ class Application:
     def refresh_info(self):
         if not self.game:
             return
-        self.info_var.set(
+        self.info.set(
               "Remaining: " + str(self.game.get_remaining()) +
             "  |  Mistakes: " + str(self.game.get_mistakes()) +
             "/" + str(GameState.MAX_MISTAKES) +
@@ -377,7 +377,7 @@ class Application:
         else:
             self.status.set(
                 "Too many mistakes! Found " +
-                str(len(gs.get_found())) + "/5 — load a new image."
+                str(len(gs.get_found())) + "/5 — Load a new image to play again."
             )
             messagebox.showinfo(
                 "Game Over",
@@ -421,6 +421,7 @@ class Application:
             messagebox.showerror('Image canot be Loaded', str(ex),parent=self.root)
             return
         
+        self.status.set('')
         self.render_frame()
         
     def reveal_all(self):
