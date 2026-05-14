@@ -1,4 +1,3 @@
-
 import tkinter as tk
 import cv2
 import numpy as np
@@ -93,6 +92,7 @@ class PixelateAlteration(ImageAlteration):
         )
         img[y1:y2, x1:x2] = cv2.resize(small, (w, h), interpolation=cv2.INTER_NEAREST)
         return img
+
 
 # Load Image in the frame with help of Image Processor
 class ImageProcessor:
@@ -214,7 +214,6 @@ class GameState:
         return False
 
 
-
 # Main Application Class
 class Application:
 
@@ -226,7 +225,6 @@ class Application:
         self.root.geometry("850x700")
         self.root.resizable(False, False)
         self.root.configure(bg="#f0f0f0")        
-
         self.game = None
         self.build_ui()
 
@@ -298,7 +296,6 @@ class Application:
 
         btn_cfg = {"font": ("Helvetica", 12, "bold"), "width": 16,
                    "relief": tk.FLAT, "padx": 20,'pady':10, 'cursor':'hand2'}
-
         tk.Button(
             button_frame,
             text="Upload Images",
@@ -315,7 +312,6 @@ class Application:
             command=self.reveal_all, **btn_cfg
         ).grid(row=0, column=1, padx=6)
 
-
         tk.Button(
             button_frame, 
             text="Restart",
@@ -323,15 +319,12 @@ class Application:
             fg="black",
             command=self.restart, **btn_cfg
         ).grid(row=0, column=2, padx=6)
-
-
     
     def on_image_click(self, event):
         if not self.game or not self.game.is_active():
             return
 
         click = self.game.register_click(event.x, event.y)
-
         if click:
             r = 28
             for frame in (self.frame_left, self.frame_right):
@@ -347,22 +340,14 @@ class Application:
                 self.end_round('mistakes')
             else:
                 remaining_guesses = GameState.MAX_MISTAKES - self.game.get_mistakes()
-                messagebox.showwarning(
-                    "Wrong!",
-                    "Not a difference here.\nYou have " +
-                    str(remaining_guesses) + " guess(es) left.", parent = self.root
-                )
-        
+                messagebox.showwarning("Wrong!","Not a difference here.\nYou have " + str(remaining_guesses) + " guess(es) left.", parent = self.root)
         self.refresh_info()
 
     def refresh_info(self):
         if not self.game:
             return
         self.info.set(
-              "Remaining: " + str(self.game.get_remaining()) +
-            "  |  Mistakes: " + str(self.game.get_mistakes()) +
-            "/" + str(GameState.MAX_MISTAKES) +
-            "  |  Score: " + str(self.game.get_score()) 
+              "Remaining: " + str(self.game.get_remaining()) + "  |  Mistakes: " + str(self.game.get_mistakes()) + "/" + str(GameState.MAX_MISTAKES) + "  |  Score: " + str(self.game.get_score()) 
         )
 
     def end_round(self, reason):
@@ -370,25 +355,12 @@ class Application:
 
         if reason == "win":
             self.status.set("All 5 differences found!")
-            messagebox.showinfo(
-                "You Win!",
-                "Excellent! You found all 5 differences!\nScore: " + str(gs.get_score()), parent = self.root
-            )
+            messagebox.showinfo("You Win!","Excellent! You found all 5 differences!\nScore: " + str(gs.get_score()), parent = self.root)
         else:
-            self.status.set(
-                "Too many mistakes! Found " +
-                str(len(gs.get_found())) + "/5 — Load a new image to play again."
-            )
-            messagebox.showinfo(
-                "Game Over",
-                "You made 3 mistakes.\nFound: " + str(len(gs.get_found())) +
-                "/5  |  Score: " + str(gs.get_score()), parent = self.root
-            )
-
-
+            self.status.set("Too many mistakes! Found " + str(len(gs.get_found())) + "/5 — Load a new image to play again.")
+            messagebox.showinfo("Game Over", "You made 3 mistakes.\nFound: " + str(len(gs.get_found())) + "/5  |  Score: " + str(gs.get_score()), parent = self.root)
 
     # Image rendering in the frames
-
     def cv_to_tk(self,img):
         return ImageTk.PhotoImage(Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB)))
 
@@ -399,14 +371,11 @@ class Application:
         self.frame_left.delete('all')
         self.frame_left.create_image(0,0,anchor="nw",image=original_image)
         self.frame_left.photo = original_image
-
         self.frame_right.delete('all')
         self.frame_right.create_image(0,0,anchor="nw",image=modified_image)
         self.frame_right.photo = modified_image
-
         self.refresh_info()
         
-
     def upload_images(self):
         path = filedialog.askopenfilename(
             title="Select an images", 
@@ -420,7 +389,6 @@ class Application:
         except(FileNotFoundError, RuntimeError) as ex:
             messagebox.showerror('Image canot be Loaded', str(ex),parent=self.root)
             return
-        
         self.status.set('')
         self.render_frame()
         
@@ -451,9 +419,6 @@ class Application:
             return
         self.status.set("")
         self.render_frame()
-    
-
-
 
 # main function call
 if __name__ == "__main__":
