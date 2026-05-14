@@ -6,17 +6,19 @@ from tkinter import filedialog, messagebox
 import random
 
 
-# Class to create a alter image with difference
+# Base class for all image alterations
 class ImageAlteration :
     def __init__(self, region_size = 50):
         self._region_size = region_size
 
     def get_region_size(self):
-        return self._region_size
+        return self._region_size 
 
+    # each subclass overrides this with its own effect
     def apply(self, img, x, y):
         raise NotImplementedError("Each alteration must implement apply() method")
 
+   # returns clamped bounding box around (x, y) to avoid going out of image bounds
     def get_roi_bounds(self, img, x, y):
         half = self._region_size // 2
         h, w = img.shape[:2]
@@ -31,7 +33,7 @@ class ImageAlteration :
     def __repr__(self):
         return self.__class__.__name__ + "(region_size=" + str(self._region_size) + ")"
 
-#  Shift the hue of region in HSV space to create difference
+# Shift the hue of region in HSV space to create difference
 class ColourShiftAlteration(ImageAlteration):
     def __init__(self, region_size=50, shift=45):
         super().__init__(region_size)
@@ -39,7 +41,7 @@ class ColourShiftAlteration(ImageAlteration):
     
     def apply(self, img, x, y):
         x1, y1, x2, y2 = self.get_roi_bounds(img, x, y)
-        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV).astype(np.int32)
+        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV).astype(np.int32) # int32 to avoid overflow
         hsv[y1:y2, x1:x2, 0] = (hsv[y1:y2, x1:x2, 0] + self.shift) % 180
         return cv2.cvtColor(hsv.astype(np.uint8), cv2.COLOR_HSV2BGR)
 
@@ -58,7 +60,7 @@ class GaussianBlurAlteration(ImageAlteration):
         )
         return img
 
-# Brightness alteration in image
+# Increase brightness to alter image
 class BrightnessAlteration(ImageAlteration):
 
     def __init__(self, beta=60, region_size=50):
@@ -72,12 +74,12 @@ class BrightnessAlteration(ImageAlteration):
         )
         return img
 
-# Add pixelate effect to a region
+# Add pixelate effect to a Image
 class PixelateAlteration(ImageAlteration):
 
     def __init__(self, block_size=10, region_size=50):
         super().__init__(region_size)
-        self.block_size = max(block_size, 2)
+        self.block_size = max(block_size, 2) # block size of at least 2 to avoid divide by zero
 
     def apply(self, img, x, y):
         x1, y1, x2, y2 = self.get_roi_bounds(img, x, y)
@@ -90,7 +92,8 @@ class PixelateAlteration(ImageAlteration):
             (max(1, w // self.block_size), max(1, h // self.block_size)),
             interpolation=cv2.INTER_LINEAR,
         )
-        img[y1:y2, x1:x2] = cv2.resize(small, (w, h), interpolation=cv2.INTER_NEAREST)
+
+        img[y1:y2, x1:x2] = cv2.resize(small, (w, h), interpolation=cv2.INTER_NEAREST) # scale back up with NEAREST so pixels stay blocky
         return img
 
 
@@ -99,7 +102,7 @@ class ImageProcessor:
 
     IMAGE_SIZE = (400,400)
     NUM_OF_DIFFERENCES = 5
-    MIN_SEPARATION = 60
+    MIN_SEPARATION = 60 # minimum pixel distance between any two difference centres
 
     def __init__(self,image_path):
         self._path = image_path
@@ -107,19 +110,8 @@ class ImageProcessor:
         
         if original_image is None:
             raise FileNotFoundError("Image not found: "+ image_path)
-        
-        # Preserve aspect ratio with letterboxing
-        h, w = original_image.shape[:2]
-        target_w, target_h = self.IMAGE_SIZE
-        scale = min(target_w / w, target_h / h)
-        new_w, new_h = int(w * scale), int(h * scale)
-        resized = cv2.resize(original_image, (new_w, new_h))
 
-        canvas = np.zeros((target_h, target_w, 3), dtype=np.uint8)
-        x_off = (target_w - new_w) // 2
-        y_off = (target_h - new_h) // 2
-        canvas[y_off:y_off + new_h, x_off:x_off + new_w] = resized
-        self.original_image = canvas
+        self.original_image = self._fit_to_frame(original_image)
         self.modified_image = None
         self._difference_centres = []
         self._generate_difference()
@@ -153,7 +145,7 @@ class ImageProcessor:
             self.modified_image = alteration.apply(self.modified_image, x, y)
             self._difference_centres.append((x, y))
             
-
+    # picks a random point that is far enough from all existing difference centres
     def _random_point(self):
         margin = 45
         max_attempts = 1000
@@ -169,9 +161,23 @@ class ImageProcessor:
             if not is_close:
                 return x, y
         raise RuntimeError("Failed to find a valid point without overlapping")
+    
+    # resize image to fit inside IMAGE_SIZE while keeping aspect ratio (framed image)
+    def _fit_to_frame(self, img):
+        h, w = img.shape[:2]
+        target_w, target_h = self.IMAGE_SIZE
+        scale = min(target_w / w, target_h / h)
+        new_w, new_h = int(w * scale), int(h * scale)
+        resized = cv2.resize(img, (new_w, new_h))
+
+        image = np.zeros((target_h, target_w, 3), dtype=np.uint8)
+        x_off = (target_w - new_w) // 2
+        y_off = (target_h - new_h) // 2
+        image[y_off:y_off + new_h, x_off:x_off + new_w] = resized
+        return image
 
         
-# keep track of game states and encapsulates all mutable data 
+# stores all mutable game state for one round - score, mistakes, found differences
 class GameState:
 
     MAX_MISTAKES = 3
@@ -180,7 +186,7 @@ class GameState:
 
     def __init__(self, processor: ImageProcessor):
         self.processor = processor
-        self.found = []
+        self.found = []   # list of (x, y) centres that the player has found
         self.mistakes = 0
         self.score = 0
     
@@ -225,14 +231,14 @@ class GameState:
         return False
 
 
-# Main Application Class
+# Main GUI class - builds the interface and handles all user interaction
 class Application:
 
     FRAME_SIZE = 400
 
     def __init__(self, root):
         self.root = root
-        self.root.title("Group 39 - Spot the Differences")
+        self.root.title("Group 39: Spot the Differences")
         self.root.geometry("850x700")
         self.root.resizable(False, False)
         self.root.configure(bg="#f0f0f0")        
@@ -332,12 +338,12 @@ class Application:
         ).grid(row=0, column=2, padx=6)
     
     def on_image_click(self, event):
-        if not self.game or not self.game.is_active():
+        if not self.game or not self.game.is_active():        # ignore clicks if no game loaded or round is already over
             return
 
         click = self.game.register_click(event.x, event.y)
         if click:
-            r = 28
+            r = 28 # radius of the circle drawn around the click location
             for frame in (self.frame_left, self.frame_right):
                 frame.create_oval(
                     event.x-r, event.y-r,
@@ -354,6 +360,7 @@ class Application:
                 messagebox.showwarning("Wrong!","Not a difference here.\nYou have " + str(remaining_guesses) + " guess(es) left.", parent = self.root)
         self.refresh_info()
 
+    # updates the info bar with current remaining, mistakes and score
     def refresh_info(self):
         if not self.game:
             return
@@ -362,7 +369,7 @@ class Application:
         )
 
     def end_round(self, reason):
-        gs = self.game
+        gs = self.game # reference to the game state
 
         if reason == "win":
             self.status.set("All differences found! You WON!!!")
@@ -371,7 +378,7 @@ class Application:
             self.status.set("Too many mistakes! Found " + str(len(gs.get_found())) + "/5 — Load a new image to play again.")
             messagebox.showinfo("Game Over", "You made 3 mistakes.\nFound: " + str(len(gs.get_found())) + "/5  |  Score: " + str(gs.get_score()), parent = self.root)
 
-    # Image rendering in the frames
+    # converts OpenCV BGR image to a Tkinter compatible Image
     def cv_to_tk(self,img):
         return ImageTk.PhotoImage(Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB)))
 
@@ -381,10 +388,12 @@ class Application:
 
         self.frame_left.delete('all')
         self.frame_left.create_image(0,0,anchor="nw",image=original_image)
-        self.frame_left.photo = original_image
+        self.frame_left.photo = original_image  
+        
         self.frame_right.delete('all')
         self.frame_right.create_image(0,0,anchor="nw",image=modified_image)
-        self.frame_right.photo = modified_image
+        self.frame_right.photo = modified_image 
+        
         self.refresh_info()
         
     def upload_images(self):
@@ -422,6 +431,7 @@ class Application:
         self.refresh_info()
         self.status.set("All differences revealed. Load a new image to play again.")
 
+    # restart generates new differences on the same image
     def restart(self):
         if not self.game:
             messagebox.showwarning("No Game", "Please load an image first.", parent=self.root)
